@@ -1,0 +1,7 @@
+.DS_Store
+.env
+.idea/*
+__pycache__/*
+posts.db
+posts.db-shm
+posts.db-wal
