@@ -11,20 +11,16 @@ async def init_db():
     await db.execute("PRAGMA journal_mode=WAL;")
 
     await db.execute("""
-    CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        store_name TEXT NOT NULL,
-        game_title TEXT NOT NULL,
-        game_description TEXT,
-        price REAL NOT NULL,
-        discount INTEGER,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        status TEXT NOT NULL,
-        store_link TEXT NOT NULL
-    );
+    CREATE TABLE IF NOT EXISTS steam_apps_info (
+        app_id INTEGER PRIMARY KEY,
+        discount_percent INTEGER NOT NULL,
+        init_price REAL NOT NULL,
+        status INTEGER NOT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
     """)
 
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_posts_status_and_updated_at ON posts(status, updated_at);")
+    await db.execute("CREATE INDEX IF NOT EXISTS steam_apps_info_status_and_updated_at ON steam_apps_info(status, updated_at);")
 
     await db.commit()
 

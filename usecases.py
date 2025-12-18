@@ -11,129 +11,89 @@ from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import aiosqlite
 
+from steam_web_api import Steam
+
+
+
+logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+logger = logging.getLogger(__name__)
+
 
 
 class PostStatus(Enum):
-    PENDING_PUBLISH = "PENDING_PUBLISH"
-    PUBLISHED = "PUBLISHED"
-
-@dataclass
-class Post:
-    id: int
-    store_name: str
-    game_title: str
-    game_description: str
-    price: float
-    discounted_price: float
-    discount: int
-    updated_at: datetime # Создание засчитывается за обновление
-    status: PostStatus
-    store_link: str
+    PUBLISHED = 0
+    PENDING_PUBLISH = 1
 
 
 
-# TODO: реализовать
-# TODO: тесты
-async def parse_steam_games(db: aiosqlite.Connection, logger: logging.Logger, steam_api_key: str):
-    # TODO: Send request to api
-    # TODO: Create Post model and save to db
-    # При обновлении старой (триггер обновления - цена) или сохранении сущности в базе, статус - PENDING_PUBLISH
-    # и изменяю updated_at
-    logger.info("Requesting for sale games from Steam...")
-
-
-
-async def clean_old_posts(db: aiosqlite.Connection, logger: logging.Logger):
-    delete_query = """
-    DELETE FROM posts
-    WHERE status = ?
-    AND updated_at <= datetime('now', '-3 months')
+async def find_steam_ids(db: aiosqlite.Connection, steam: Steam, steam_request_limit: int):
     """
-
-    # TODO: добавить лимит на очистку?
-    logger.info("Start cleaning old posts...")
-    cursor = await db.execute(delete_query, (PostStatus.PUBLISHED.value, ))
-    await db.commit()
-
-    if cursor.rowcount != 0:
-        logger.info(f"{cursor.rowcount} old posts were cleaned")
-    else:
-        logger.info("No old posts were found")
-
-
-
-async def publish_posts(db: aiosqlite.Connection, bot: Bot, logger: logging.Logger, chat_id: int):
-    select_query = """
-        SELECT * FROM posts
-        WHERE status = ?
+    Проверяет, существует ли игра c предположительным app_id. Если да - сохраняет
+    этот app_id, цену игры, скидку на нее в базу
     """
-
-    update_query = """
-    UPDATE posts
-    SET status = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-    """
-
-    rnd = Random()
-
-    async with db.execute(select_query, (PostStatus.PENDING_PUBLISH.value, )) as cursor:
-        rows = await cursor.fetchall() # TODO: сейчас выгружаются сразу в память. Сделать генератором?
-
-        if not rows:
-            logger.info("No pending posts were found")
-        else:
-            logger.info(f"Found {len(rows)} pending posts. Start publishing to group...")
-
-        for row in rows:
-
-            post = Post(
-                id=int(row[0]),
-                store_name=row[1],
-                game_title=row[2],
-                game_description=row[3],
-                price=float(row[4]),
-                discounted_price=(100 - int(row[5])) / 100 * float(row[4]),
-                discount=int(row[5]),
-                updated_at=datetime.fromisoformat(row[6]),
-                status=PostStatus(row[7]),
-                store_link=row[8],
-            )
-
-            text_message = (
-                f"<h2>{html.escape(post.game_title)}</h2>"
-                f"<br><br>"
-                f"{html.escape(post.game_description)}"
-                f"<br>"
-                f"<i>Store:</i> {html.escape(post.store_name)}"
-                f"<br>"
-                f"<i>Price</i>: <s>{post.price}</s> -{post.discount}% → {post.discounted_price}"
-            )
-
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=f"Открыть в {post.store_name}",
-                        url=post.store_link
-                    )
-                ]
-            ])
-
-            try:
-                logger.info(f"Publishing post {post.id}...")
-                # TODO: добавить лимит отправок?
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=text_message,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard
-                )
-            except Exception as e:
-                logger.error(f"Failed to send post {post.id}", exc_info=e)
-                continue
-
-            await db.execute(update_query, (PostStatus.PUBLISHED.value, post.id))
-            logger.info(f"Post {post.id} is published")
-            await db.commit()
-
-            await asyncio.sleep(rnd.randint(2, 10))  # чтобы не заспамить группу
     
+    BATCH_SIZE = 30
+    
+    # Если база пустая - начинаю искать с 1, иначе беру максимальный айдишник и стартую со следующего после него
+    start_value = 0
+    async with db.execute("SELECT EXISTS(SELECT 1 FROM steam_apps_info)") as c:
+        if (await c.fetchone())[0] != 0:
+            async with db.execute("SELECT MAX(app_id) FROM steam_apps_info") as cr:
+                start_value = int((await cr.fetchone())[0])
+    
+    insert_count = 0
+    for possible_app_id in range(start_value + 1, start_value + steam_request_limit):
+        response = steam.apps.get_app_details(possible_app_id, country="RU", filters="price_overview")
+        if response[str(possible_app_id)]["success"] is True:
+            app_id = possible_app_id
+            discount_percent = response[str(possible_app_id)]["data"]["price_overview"]["discount_percent"]
+            initial_price = float(response[str(possible_app_id)]["data"]["price_overview"]["initial"]) / 100
+
+            await db.execute(
+                """
+                INSERT INTO steam_apps_info (
+                    app_id,
+                    discount_percent,
+                    init_price,
+                    status
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    app_id, discount_percent,
+                    initial_price, PostStatus.PENDING_PUBLISH.value
+                )
+            )
+            insert_count += 1
+            if insert_count % BATCH_SIZE == 0:
+                await db.commit()
+    
+    # Коммит остатка, если есть
+    if insert_count % BATCH_SIZE != 0:
+        await db.commit()
+
+
+
+
+async def update_price_and_discount():
+    """
+    Берет уже опубликованную запись из базы, которой больше 1 месяца, и проверяет, изменилась ли
+    скидка или цена на эту игру. Если да - обновляет цену и скидку и меняет на статус PENDING_PUBLISH
+    """
+    pass
+
+
+
+async def publish_post():
+    """
+    Берет запись из базы со статусом PENDING_PUBLISH и опубликовывает ее.
+    DELETE: В день должен отправлять 2 - 5 постов с переменной разницей отправки от 45 мин до 2 часов. Этот коммент в таску
+    положить, а отсюда удалить
+    """
+    # TODO: сделать запрос с фильтром на получение обложки, 3 скринов, разработчиков, цены и скидки
+    # TODO: написать сообщение для бота: обложка + 3 скрина, название игры, разработчик, краткое описание, старая зачеркнутая цена, стрелочка вправо, цена со скидкой, -{скидка}%
+    # Публиковать только те, на которые есть скидка. Если скидка=0 - игнорировать
+    pass
