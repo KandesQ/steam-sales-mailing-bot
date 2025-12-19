@@ -43,7 +43,7 @@ async def test_if_database_is_empty():
     expected_id = 1
     expected_discount_percent = 30
     expected_init_price = 1500.0
-    expected_status = usecases.PostStatus.PENDING_PUBLISH
+    expected_status = usecases.PostStatus.PENDING_PUBLISH.value
 
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
@@ -65,7 +65,7 @@ async def test_if_database_is_empty():
         assert expected_id == row_info[0]
         assert expected_discount_percent == row_info[1]
         assert float(expected_init_price) == row_info[2]
-        assert expected_status == usecases.PostStatus(row_info[3])
+        assert expected_status == usecases.PostStatus(row_info[3]).value
     
     await db.close()
 
@@ -91,6 +91,7 @@ async def test_if_database_is_not_empty():
             2000, usecases.PostStatus.PUBLISHED.value
         )
     )
+    await db.commit()
 
     expected_info_json = {'5': 
                     {'success': True, 'data': 

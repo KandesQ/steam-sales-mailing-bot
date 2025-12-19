@@ -78,12 +78,45 @@ async def find_steam_ids(db: aiosqlite.Connection, steam: Steam, steam_request_l
 
 
 
-async def update_price_and_discount():
+async def update_steam_game_price_and_discount(db: aiosqlite.Connection, steam: Steam, update_limit: int):
     """
-    Берет уже опубликованную запись из базы, которой больше 1 месяца, и проверяет, изменилась ли
-    скидка или цена на эту игру. Если да - обновляет цену и скидку и меняет на статус PENDING_PUBLISH
+    Берет {update_limit} уже опубликованных записей из базы, которым больше 1 месяца, и проверяет, изменилась ли
+    скидка или цена на эти игры. Если да - обновляет цену и скидку и меняет на статус PENDING_PUBLISH
     """
-    pass
+    
+    async with db.execute("""
+    SELECT app_id, discount_percent, init_price FROM steam_apps_info
+    WHERE updated_at <= datetime('now', '-1 month') AND status = ?
+    LIMIT ?
+    """, (PostStatus.PUBLISHED.value, update_limit)) as c:
+        rows = await c.fetchall()
+
+    for app_id, old_discount_percent, old_init_price in rows:
+        response = steam.apps.get_app_details(app_id, country="RU", filters="price_overview")
+        
+        # Проверка что за это время не запретили игру в России
+        if response[str(app_id)]["success"] is True:
+            new_discount_percent = response[str(app_id)]["data"]["price_overview"]["discount_percent"]
+            new_init_price = float(response[str(app_id)]["data"]["price_overview"]["initial"]) / 100
+
+            if new_init_price != old_init_price or new_discount_percent != old_discount_percent:
+                await db.execute("""
+                UPDATE steam_apps_info
+                SET
+                    init_price = ?,
+                    discount_percent = ?,
+                    status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE app_id = ?
+                """, (
+                    new_init_price, new_discount_percent,
+                    PostStatus.PENDING_PUBLISH.value,
+                    app_id
+                ))
+    
+    await db.commit()
+
+    
 
 
 
@@ -95,5 +128,6 @@ async def publish_post():
     """
     # TODO: сделать запрос с фильтром на получение обложки, 3 скринов, разработчиков, цены и скидки
     # TODO: написать сообщение для бота: обложка + 3 скрина, название игры, разработчик, краткое описание, старая зачеркнутая цена, стрелочка вправо, цена со скидкой, -{скидка}%
+    # и в конце инлайн кнопка Open in Steam с переходом на страницу игры в стиме
     # Публиковать только те, на которые есть скидка. Если скидка=0 - игнорировать
     pass
