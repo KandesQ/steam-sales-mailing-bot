@@ -35,3 +35,8 @@ STEAM_API_KEY={YOUR_STEAM_API_KEY}
 ```bash
 python3 main.py
 ```
+
+### Run tests:
+```bash
+PYTHONPATH=. pytest tests/ 
+```

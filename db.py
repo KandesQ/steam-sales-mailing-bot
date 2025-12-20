@@ -1,8 +1,10 @@
+import asyncio
 import aiosqlite
 
 DB_PATH = "posts.db"
 
 db: aiosqlite.Connection | None = None
+db_lock = asyncio.Lock()
 
 async def init_db():
     global db
@@ -20,7 +22,7 @@ async def init_db():
     )
     """)
 
-    await db.execute("CREATE INDEX IF NOT EXISTS steam_apps_info_status_and_updated_at ON steam_apps_info(status, updated_at);")
+    await db.execute("CREATE INDEX IF NOT EXISTS steam_apps_info_status_and_updated_at ON steam_apps_info(status, updated_at)")
 
     await db.commit()
 

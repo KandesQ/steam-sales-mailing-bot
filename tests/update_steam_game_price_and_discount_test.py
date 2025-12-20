@@ -1,5 +1,6 @@
 
 
+
 import datetime
 from unittest.mock import Mock
 from steam_web_api import Steam
@@ -232,3 +233,22 @@ async def test_if_game_has_become_unavailable_in_Russia():
         assert info_row[4] == old_date
 
     await db.close()
+
+
+
+@pytest.mark.asyncio
+async def test_if_api_response_format_is_wrong():
+    """
+    Если API возвращает неправильный формат, юзкейс 
+    должен пропустить обработку
+    """
+    raise NotImplementedError
+
+
+@pytest.mark.asyncio
+async def test_if_api_request_limit_is_exceeded():
+    """
+    Если превышен лимит запросов к API, то оно
+    возвращает None. Код должен ожидать 6 минут
+    """
+    raise NotImplementedError

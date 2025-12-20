@@ -209,3 +209,22 @@ async def test_if_not_success():
         assert len(info_rows) == 0
     
     await db.close()
+
+
+
+@pytest.mark.asyncio
+async def test_if_api_response_format_is_wrong():
+    """
+    Если API возвращает неправильный формат, юзкейс 
+    должен пропустить обработку
+    """
+    raise NotImplementedError
+
+
+@pytest.mark.asyncio
+async def test_if_api_request_limit_is_exceeded():
+    """
+    Если превышен лимит запросов к API, то оно
+    возвращает None. Код должен ожидать 6 минут
+    """
+    raise NotImplementedError

@@ -8,3 +8,4 @@ posts.db-shm
 posts.db-wal
 test.py
 .pytest_cache
+tests/__pycache__
