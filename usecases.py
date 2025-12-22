@@ -22,9 +22,11 @@ class PostStatus(Enum):
 
 
 
-async def find_steam_ids(db: aiosqlite.Connection, steam: Steam,
-                         steam_request_limit: int, retry_request_period: int = 420,
-                         retry_attempts: int = 3):
+async def find_steam_ids(
+        db: aiosqlite.Connection, steam: Steam,
+        steam_request_limit: int, retry_request_period: int = 420,
+        retry_attempts: int = 3
+        ):
     """
     Проверяет, существует ли игра c предположительным app_id. Если да - сохраняет
     этот app_id, цену игры, скидку на нее в базу
@@ -50,12 +52,14 @@ async def find_steam_ids(db: aiosqlite.Connection, steam: Steam,
 
                 if response is None:
                     # TODO: Log...
-                    await asyncio.sleep(retry_request_period)
-
-                    if attempt == retry_attempts:
+                    if attempt != retry_attempts:
+                        await asyncio.sleep(retry_request_period)
+                        # TODO: Log..
+                    else:
                         # TODO: Log..
                         return
                     continue
+
                 break
 
             if (str(possible_app_id) not in response) or ("data" not in response[str(possible_app_id)]):
@@ -95,7 +99,11 @@ async def find_steam_ids(db: aiosqlite.Connection, steam: Steam,
 
 
 
-async def update_steam_game_price_and_discount(db: aiosqlite.Connection, steam: Steam, update_limit: int):
+async def update_steam_game_price_and_discount(
+        db: aiosqlite.Connection, steam: Steam, update_limit: int,
+        retry_request_period: int = 420,
+        retry_attempts: int = 3
+        ):
     """
     Берет {update_limit} уже опубликованных записей из базы, которым больше 1 месяца, и проверяет, изменилась ли
     скидка или цена на эти игры. Если да - обновляет цену и скидку и меняет на статус PENDING_PUBLISH
@@ -111,8 +119,32 @@ async def update_steam_game_price_and_discount(db: aiosqlite.Connection, steam: 
             rows = await c.fetchall()
 
         for app_id, old_discount_percent, old_init_price in rows:
-            response = steam.apps.get_app_details(app_id, country="RU", filters="price_overview")
-            
+
+
+            for attempt in range(1, retry_attempts + 1):
+                response = steam.apps.get_app_details(app_id, country="RU", filters="price_overview")
+
+                if response is None:
+                    # TODO: Log...
+                    if attempt != retry_attempts:
+                        # TODO: Log...
+                        await asyncio.sleep(retry_request_period)
+                    else:
+                        # TODO: Log...
+                        return
+
+                    continue
+
+                break
+
+
+
+
+            if str(app_id) not in response or ("data" not in response[str(app_id)]):
+                # TODO: Log..
+                return
+
+
             # Проверка что за это время не запретили игру в России
             if response[str(app_id)]["success"] is True:
                 new_discount_percent = response[str(app_id)]["data"]["price_overview"]["discount_percent"]
@@ -140,9 +172,11 @@ async def update_steam_game_price_and_discount(db: aiosqlite.Connection, steam: 
 
 
 
-async def publish_steam_post(db: aiosqlite.Connection, steam: Steam,
-                             bot: Bot, group_chat_id: int, retry_attempts: int = 3,
-                             request_retry_period: int = 420):
+async def publish_steam_post(
+        db: aiosqlite.Connection, steam: Steam,
+        bot: Bot, group_chat_id: int, retry_attempts: int = 3,
+        request_retry_period: int = 420
+        ):
     """
     Берет запись из базы со статусом PENDING_PUBLISH и опубликовывает ее.
 
@@ -172,9 +206,10 @@ async def publish_steam_post(db: aiosqlite.Connection, steam: Steam,
             # Если превышен лимит обращений к steam API
             if response is None:
                 # TODO: Log about attempt...
-                await asyncio.sleep(request_retry_period)
-
-                if attempt == retry_attempts:
+                if attempt != retry_attempts:
+                    await asyncio.sleep(request_retry_period)
+                    # TODO: Log...
+                else:
                     # TODO: Log...
                     return
                 continue

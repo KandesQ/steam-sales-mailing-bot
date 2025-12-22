@@ -242,7 +242,43 @@ async def test_if_api_response_format_is_wrong():
     Если API возвращает неправильный формат, юзкейс 
     должен пропустить обработку
     """
-    raise NotImplementedError
+
+    db = await setup_in_memory_db()
+    id = 1
+    init_price = 2500.0
+    discount_percent = 0
+    old_status = usecases.PostStatus.PUBLISHED.value
+    old_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=31)).strftime("%Y-%m-%d %H:%M:%S")
+    await db.execute(
+    """
+    INSERT INTO steam_apps_info (
+        app_id,
+        discount_percent,
+        init_price,
+        status,
+        updated_at
+    ) VALUES (?, ?, ?, ?, ?)
+    """,
+    (
+        id, discount_percent,
+        init_price, old_status,
+        old_date
+    )
+    )
+    await db.commit()
+
+
+    json_without_data_key = {str(id): {'success': True}}
+    json_without_id_key = {"Some": "key"}
+    steam_api_mock = Mock(spec=Steam)
+
+    steam_api_mock.apps.get_app_details.return_value = json_without_id_key
+    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2)
+
+    steam_api_mock.apps.get_app_details.return_value = json_without_data_key
+    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2)
+
+    await db.close()
 
 
 @pytest.mark.asyncio
@@ -251,4 +287,36 @@ async def test_if_api_request_limit_is_exceeded():
     Если превышен лимит запросов к API, то оно
     возвращает None. Код должен ожидать 6 минут
     """
-    raise NotImplementedError
+
+    db = await setup_in_memory_db()
+    id = 1
+    init_price = 2500.0
+    discount_percent = 0
+    old_status = usecases.PostStatus.PUBLISHED.value
+    old_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=31)).strftime("%Y-%m-%d %H:%M:%S")
+    await db.execute(
+    """
+    INSERT INTO steam_apps_info (
+        app_id,
+        discount_percent,
+        init_price,
+        status,
+        updated_at
+    ) VALUES (?, ?, ?, ?, ?)
+    """,
+    (
+        id, discount_percent,
+        init_price, old_status,
+        old_date
+    )
+    )
+    await db.commit()
+
+    none_response = None
+
+    steam_api_mock = Mock(spec=Steam)
+
+    steam_api_mock.apps.get_app_details.return_value = none_response
+    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2, 2, 2)
+
+    await db.close()
