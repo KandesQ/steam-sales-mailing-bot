@@ -2,6 +2,7 @@
 
 
 import datetime
+import logging
 from unittest.mock import Mock
 from steam_web_api import Steam
 
@@ -70,6 +71,8 @@ async def test_if_init_price_has_changed():
                     }
                 }
             }
+
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 1:
@@ -80,7 +83,7 @@ async def test_if_init_price_has_changed():
 
 
     # Act
-    await usecases.update_steam_game_price_and_discount(db, steam_mock, 1)
+    await usecases.update_steam_game_price_and_discount(db, steam_mock, 1, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -139,6 +142,8 @@ async def test_if_discount_has_changed():
                     }
                 }
             }
+
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 1:
@@ -149,7 +154,7 @@ async def test_if_discount_has_changed():
 
 
     # Act
-    await usecases.update_steam_game_price_and_discount(db, steam_mock, 1)
+    await usecases.update_steam_game_price_and_discount(db, steam_mock, 1, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -208,6 +213,7 @@ async def test_if_game_has_become_unavailable_in_Russia():
                 }
             }
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 1:
@@ -217,7 +223,7 @@ async def test_if_game_has_become_unavailable_in_Russia():
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.update_steam_game_price_and_discount(db, steam_mock, 1)
+    await usecases.update_steam_game_price_and_discount(db, steam_mock, 1, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -270,13 +276,15 @@ async def test_if_api_response_format_is_wrong():
 
     json_without_data_key = {str(id): {'success': True}}
     json_without_id_key = {"Some": "key"}
+
+    logger_mock = Mock(spec=logging.Logger)
     steam_api_mock = Mock(spec=Steam)
 
     steam_api_mock.apps.get_app_details.return_value = json_without_id_key
-    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2)
+    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2, logger_mock)
 
     steam_api_mock.apps.get_app_details.return_value = json_without_data_key
-    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2)
+    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2, logger_mock)
 
     await db.close()
 
@@ -314,9 +322,10 @@ async def test_if_api_request_limit_is_exceeded():
 
     none_response = None
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_api_mock = Mock(spec=Steam)
 
     steam_api_mock.apps.get_app_details.return_value = none_response
-    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2, 2, 2)
+    await usecases.update_steam_game_price_and_discount(db, steam_api_mock, 2, logger_mock,2, 2)
 
     await db.close()

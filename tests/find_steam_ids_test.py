@@ -1,15 +1,11 @@
 import logging
-
-import pytest
-import aiosqlite
-
 from unittest.mock import Mock
 
-from aiogram import Bot
+import aiosqlite
+import pytest
 from steam_web_api import Steam
 
 import usecases
-
 
 
 async def setup_in_memory_db():
@@ -29,113 +25,6 @@ async def setup_in_memory_db():
     return db
 
 
-
-@pytest.mark.asyncio
-async def test_if_database_is_empty():
-    """
-    Точкой старта поиска должна быть единица
-    """
-    # Arrange
-    db = await setup_in_memory_db() # пустая база
-    expected_info_json = {'1': 
-                    {'success': True, 'data': 
-                        {'price_overview': 
-                            {'currency': 'RUB', 'initial': 150000, 'final': 105000, 'discount_percent': 30, 'initial_formatted': '1500 руб.', 'final_formatted': '1050 руб.'}
-                        }
-                    }
-                }
-    expected_id = 1
-    expected_discount_percent = 30
-    expected_init_price = 1500.0
-    expected_status = usecases.PostStatus.PENDING_PUBLISH.value
-
-    logger_mock = Mock(spec=logging.Logger)
-    steam_mock = Mock(spec=Steam)
-    def side_effect(app_id, country, filters):
-        if app_id == 1:
-            return expected_info_json
-        raise AssertionError("app_id=1 was not requested")
-
-    steam_mock.apps.get_app_details.side_effect = side_effect
-
-    # Act
-    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
-
-    # Assert
-    async with db.execute("SELECT * FROM steam_apps_info") as c:
-        info_rows = await c.fetchall()
-        assert len(info_rows) == 1
-        row_info = info_rows[0]
-
-        assert expected_id == row_info[0]
-        assert expected_discount_percent == row_info[1]
-        assert float(expected_init_price) == row_info[2]
-        assert expected_status == usecases.PostStatus(row_info[3]).value
-    
-    await db.close()
-
-
-@pytest.mark.asyncio
-async def test_if_database_is_not_empty():
-    """
-    Точкой старта поиска должен быть максимальный айдишник в базе
-    """
-    # Arrange
-    db = await setup_in_memory_db()
-    await db.execute(
-        """
-        INSERT INTO steam_apps_info (
-            app_id,
-            discount_percent,
-            init_price,
-            status
-        ) VALUES (?, ?, ?, ?)
-        """,
-        (
-            4, 20,
-            2000, usecases.PostStatus.PUBLISHED.value
-        )
-    )
-    await db.commit()
-
-    expected_info_json = {'5': 
-                    {'success': True, 'data': 
-                        {'price_overview': 
-                            {'currency': 'RUB', 'initial': 150000, 'final': 105000, 'discount_percent': 30, 'initial_formatted': '1500 руб.', 'final_formatted': '1050 руб.'}
-                        }
-                    }
-                }
-    expected_id = 5
-    expected_discount_percent = 30
-    expected_init_price = 1500.0
-    expected_status = usecases.PostStatus.PENDING_PUBLISH
-
-    logger_mock = Mock(spec=logging.Logger)
-    steam_mock = Mock(spec=Steam)
-    def side_effect(app_id, country, filters):
-        if app_id == 5:
-            return expected_info_json
-        raise AssertionError("app_id=5 was not requested")
-
-    steam_mock.apps.get_app_details.side_effect = side_effect
-
-    # Act
-    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
-
-    # Assert
-    async with db.execute("SELECT * FROM steam_apps_info") as c:
-        info_rows = await c.fetchall()
-        assert len(info_rows) == 2
-        row_info = info_rows[1]
-
-        assert expected_id == row_info[0]
-        assert expected_discount_percent == row_info[1]
-        assert float(expected_init_price) == row_info[2]
-        assert expected_status == usecases.PostStatus(row_info[3])
-    
-    await db.close()
-
-
 @pytest.mark.asyncio
 async def test_if_success():
     """
@@ -145,14 +34,18 @@ async def test_if_success():
     # Arrange
     db = await setup_in_memory_db()
 
-    expected_info_json = {'1': 
+
+    with open("counter.txt", "r") as f:
+        expected_id = int(f.read()) + 1
+
+
+    expected_info_json = {str(expected_id):
                     {'success': True, 'data': 
                         {'price_overview': 
                             {'currency': 'RUB', 'initial': 150000, 'final': 105000, 'discount_percent': 30, 'initial_formatted': '1500 руб.', 'final_formatted': '1050 руб.'}
                         }
                     }
                 }
-    expected_id = 1
     expected_discount_percent = 30
     expected_init_price = 1500.0
     expected_status = usecases.PostStatus.PENDING_PUBLISH
@@ -160,14 +53,14 @@ async def test_if_success():
     logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
-        if app_id == 1:
+        if app_id == expected_id:
             return expected_info_json
-        raise AssertionError("app_id=1 was not requested")
+        raise AssertionError(f"app_id={expected_id} was not requested")
 
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
+    await usecases.find_steam_ids(db, steam_mock, 1, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -191,7 +84,10 @@ async def test_if_not_success():
     # Arrange
     db = await setup_in_memory_db()
 
-    expected_info_json = {'1': 
+    with open("counter.txt", "r") as f:
+        expected_id = int(f.read()) + 1
+
+    expected_info_json = {str(expected_id):
                     {'success': False, 'data': 
                         {'price_overview': 
                             {'currency': 'RUB', 'initial': 150000, 'final': 105000, 'discount_percent': 30, 'initial_formatted': '1500 руб.', 'final_formatted': '1050 руб.'}
@@ -202,14 +98,14 @@ async def test_if_not_success():
     logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
-        if app_id == 1:
+        if app_id == expected_id:
             return expected_info_json
-        raise AssertionError("app_id=1 was not requested")
+        raise AssertionError(f"app_id={expected_id} was not requested")
 
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
+    await usecases.find_steam_ids(db, steam_mock, 1, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:

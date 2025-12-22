@@ -26,5 +26,7 @@ async def init_db():
 
     await db.commit()
 
+    print("database initialized")
+
 async def close_db():
     await db.close()

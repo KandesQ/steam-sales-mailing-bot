@@ -1,4 +1,4 @@
-
+import logging
 
 import aiosqlite
 import pytest
@@ -55,15 +55,17 @@ async def test_if_api_response_format_is_wrong():
 
     json_without_data_key = {'1': {'success': True}}
     json_without_id_key = {"Some": "key"}
+
+    logger_mock = Mock(spec=logging.Logger)
     steam_api_mock = Mock(spec=Steam)
     bot_mock = Mock(spec=Bot)
 
 
     steam_api_mock.apps.get_app_details.return_value = json_without_id_key
-    await usecases.publish_steam_post(db, steam_api_mock, bot_mock, -1)
+    await usecases.publish_steam_post(db, steam_api_mock, bot_mock, -1, logger_mock)
 
     steam_api_mock.apps.get_app_details.return_value = json_without_data_key
-    await usecases.publish_steam_post(db, steam_api_mock, bot_mock, -1)
+    await usecases.publish_steam_post(db, steam_api_mock, bot_mock, -1, logger_mock)
 
     await db.close()
 
@@ -94,10 +96,11 @@ async def test_if_api_request_limit_is_exceeded():
     
     none_response = None
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_api_mock = Mock(spec=Steam)
     bot_mock = Mock(spec=Bot)
 
     steam_api_mock.apps.get_app_details.return_value = none_response
-    await usecases.publish_steam_post(db, steam_api_mock, bot_mock, -1, 2, 1)
+    await usecases.publish_steam_post(db, steam_api_mock, bot_mock, -1, logger_mock, 2, 1)
 
     await db.close()
