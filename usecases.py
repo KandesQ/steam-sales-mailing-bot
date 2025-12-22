@@ -22,7 +22,9 @@ class PostStatus(Enum):
 
 
 
-async def find_steam_ids(db: aiosqlite.Connection, steam: Steam, steam_request_limit: int):
+async def find_steam_ids(db: aiosqlite.Connection, steam: Steam,
+                         steam_request_limit: int, retry_request_period: int = 420,
+                         retry_attempts: int = 3):
     """
     Проверяет, существует ли игра c предположительным app_id. Если да - сохраняет
     этот app_id, цену игры, скидку на нее в базу
@@ -42,7 +44,24 @@ async def find_steam_ids(db: aiosqlite.Connection, steam: Steam, steam_request_l
         
         insert_count = 0
         for possible_app_id in range(start_value + 1, start_value + steam_request_limit):
-            response = steam.apps.get_app_details(possible_app_id, country="RU", filters="price_overview")
+
+            for attempt in range(1, retry_attempts + 1):
+                response = steam.apps.get_app_details(possible_app_id, country="RU", filters="price_overview")
+
+                if response is None:
+                    # TODO: Log...
+                    await asyncio.sleep(retry_request_period)
+
+                    if attempt == retry_attempts:
+                        # TODO: Log..
+                        return
+                    continue
+                break
+
+            if (str(possible_app_id) not in response) or ("data" not in response[str(possible_app_id)]):
+                # TODO: Log...
+                return
+
             if response[str(possible_app_id)]["success"] is True:
                 app_id = possible_app_id
                 if not response[str(possible_app_id)]["data"]:

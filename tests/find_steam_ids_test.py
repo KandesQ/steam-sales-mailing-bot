@@ -2,6 +2,8 @@ import pytest
 import aiosqlite
 
 from unittest.mock import Mock
+
+from aiogram import Bot
 from steam_web_api import Steam
 
 import usecases
@@ -218,7 +220,20 @@ async def test_if_api_response_format_is_wrong():
     Если API возвращает неправильный формат, юзкейс 
     должен пропустить обработку
     """
-    raise NotImplementedError
+
+    db = await setup_in_memory_db()
+
+    json_without_data_key = {'1': {'success': True}}
+    json_without_id_key = {"Some": "key"}
+    steam_api_mock = Mock(spec=Steam)
+
+    steam_api_mock.apps.get_app_details.return_value = json_without_id_key
+    await usecases.find_steam_ids(db, steam_api_mock, 2)
+
+    steam_api_mock.apps.get_app_details.return_value = json_without_data_key
+    await usecases.find_steam_ids(db, steam_api_mock, 2)
+
+    await db.close()
 
 
 @pytest.mark.asyncio
@@ -227,4 +242,13 @@ async def test_if_api_request_limit_is_exceeded():
     Если превышен лимит запросов к API, то оно
     возвращает None. Код должен ожидать 6 минут
     """
-    raise NotImplementedError
+    db = await setup_in_memory_db()
+
+    none_response = None
+
+    steam_api_mock = Mock(spec=Steam)
+
+    steam_api_mock.apps.get_app_details.return_value = none_response
+    await usecases.find_steam_ids(db, steam_api_mock, 2, 2, 2)
+
+    await db.close()
