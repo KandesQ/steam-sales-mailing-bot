@@ -38,12 +38,11 @@ async def find_steam_ids(
         logger.error("Could not load app id counter. File doesn't exist")
         return
 
-    logger.info("Start finding steam ids from start_value=%s", start_value)
+    logger.info("Start finding steam ids from start_value=%s", start_value + 1)
     
     async with db_lock:
         insert_count = 0
         for possible_app_id in range(start_value + 1, start_value + steam_request_limit + 1):
-            print(possible_app_id)
             for attempt in range(1, retry_attempts + 1):
                 response = steam.apps.get_app_details(possible_app_id, country="RU", filters="price_overview")
 
