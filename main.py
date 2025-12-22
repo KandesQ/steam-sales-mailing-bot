@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from random import Random
 import aiosqlite
@@ -19,7 +20,7 @@ load_dotenv()
 
 
 
-async def find_steam_ids_task(db: aiosqlite.Connection, steam: Steam):
+async def find_steam_ids_task(db: aiosqlite.Connection, steam: Steam, logger: logging.Logger):
     """
     Каждый час ищет id игр из Steam
     """
@@ -31,7 +32,7 @@ async def find_steam_ids_task(db: aiosqlite.Connection, steam: Steam):
     # TODO: в будущем вынести лимит сюда, чтобы STEAM_REQUEST_LIMIT раз вызывался find_steam_ids, а не в нем самом цикл лимита был. Для
     # остальных юзкейсов аналогично
     while True:
-        await usecases.find_steam_ids(db, steam, STEAM_REQUEST_LIMIT)
+        await usecases.find_steam_ids(db, steam, STEAM_REQUEST_LIMIT, logger)
 
         await asyncio.sleep(10)
 
@@ -83,9 +84,16 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     STEAM_API = Steam(STEAM_API_KEY)
 
-    # asyncio.create_task(find_steam_ids_task(db.db, STEAM_API))
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    logger = logging.getLogger(__name__)
+
+    asyncio.create_task(find_steam_ids_task(db.db, STEAM_API, logger))
     # asyncio.create_task(update_steam_game_price_and_discount_task(db.db, STEAM_API))
-    asyncio.create_task(publish_steam_post_task(db.db, STEAM_API, bot, CHAT_ID))
+    # asyncio.create_task(publish_steam_post_task(db.db, STEAM_API, bot, CHAT_ID))
 
     await asyncio.Event().wait()
 

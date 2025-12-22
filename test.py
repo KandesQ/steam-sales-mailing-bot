@@ -7,7 +7,7 @@ steam = Steam()
 
 
 
-res = steam.apps.get_app_details(1466060, country="RU", filters="screenshots,developers")
+res = steam.apps.get_app_details(570, country="RU", filters="price_overview")
 
 print(res)
 

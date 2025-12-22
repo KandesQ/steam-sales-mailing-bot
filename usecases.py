@@ -1,16 +1,11 @@
 import asyncio
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
 import html
 import logging
-from random import Random
+from enum import Enum
 
-from aiogram import Bot
-from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 import aiosqlite
-
+from aiogram import Bot
+from aiogram.types import InputMediaPhoto
 from steam_web_api import Steam
 
 from db import db_lock
@@ -24,7 +19,7 @@ class PostStatus(Enum):
 
 async def find_steam_ids(
         db: aiosqlite.Connection, steam: Steam,
-        steam_request_limit: int, retry_request_period: int = 420,
+        steam_request_limit: int, logger: logging.Logger, retry_request_period: int = 420,
         retry_attempts: int = 3
         ):
     """
@@ -38,12 +33,13 @@ async def find_steam_ids(
     start_value = 0
     
     async with db_lock:
-        print("start finding...")
+        logger.info(f"Start finding steam ids...")
         async with db.execute("SELECT EXISTS(SELECT 1 FROM steam_apps_info)") as c:
             if (await c.fetchone())[0] != 0:
                 async with db.execute("SELECT MAX(app_id) FROM steam_apps_info") as cr:
                     start_value = int((await cr.fetchone())[0])
-        
+                    logger.info(f"The database already has app_ids. Starting with the max app_id={start_value}")
+
         insert_count = 0
         for possible_app_id in range(start_value + 1, start_value + steam_request_limit):
 
@@ -51,28 +47,38 @@ async def find_steam_ids(
                 response = steam.apps.get_app_details(possible_app_id, country="RU", filters="price_overview")
 
                 if response is None:
-                    # TODO: Log...
                     if attempt != retry_attempts:
+                        logger.info(f"Steam API request limit reached. Waiting for {int(retry_request_period / 60)} minutes. Retry attempt: {attempt}")
                         await asyncio.sleep(retry_request_period)
-                        # TODO: Log..
                     else:
-                        # TODO: Log..
+                        logger.error(f"Couldn't get app details for app_id={possible_app_id}. Task will be delayed")
                         return
                     continue
 
                 break
 
-            if (str(possible_app_id) not in response) or ("data" not in response[str(possible_app_id)]):
-                # TODO: Log...
+
+            if str(possible_app_id) not in response:
+                logger.error("The response with app_id=%s has no app_id attribute. "
+                             "General response format might have changed", possible_app_id)
                 return
 
+            if "data" not in response[str(possible_app_id)] and response[str(possible_app_id)]["success"] is True:
+                logger.warning(f"The response with app_id=%s has no data attribute. "
+                               f"app_id=%s may have wrong response format or is unavailable in Russia",
+                               possible_app_id, possible_app_id)
+                continue
+
             if response[str(possible_app_id)]["success"] is True:
+                logger.info("Successfully found a game with app_id=%s", possible_app_id)
+
                 app_id = possible_app_id
-                if not response[str(possible_app_id)]["data"]:
+                if not response[str(app_id)]["data"]:
+                    logger.info("The game with app_id=%s has no pricing data. It's probably free", possible_app_id)
                     continue
-                discount_percent = response[str(possible_app_id)]["data"]["price_overview"]["discount_percent"]
-                initial_price = float(response[str(possible_app_id)]["data"]["price_overview"]["initial"]) / 100
-                print(f"Finded: {response}")
+                discount_percent = response[str(app_id)]["data"]["price_overview"]["discount_percent"]
+                initial_price = float(response[str(app_id)]["data"]["price_overview"]["initial"]) / 100
+
                 await db.execute(
                     """
                     INSERT INTO steam_apps_info (
@@ -89,12 +95,14 @@ async def find_steam_ids(
                 )
                 insert_count += 1
                 if insert_count % BATCH_SIZE == 0:
+                    logger.info("Inserted %d rows into steam_apps_info", insert_count)
                     await db.commit()
         
         # Коммит остатка, если есть
         if insert_count % BATCH_SIZE != 0:
+            logger.info("Inserted %d rows into steam_apps_info", insert_count)
             await db.commit()
-        print("end finding...")
+
 
 
 

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import aiosqlite
 
@@ -47,6 +49,7 @@ async def test_if_database_is_empty():
     expected_init_price = 1500.0
     expected_status = usecases.PostStatus.PENDING_PUBLISH.value
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 1:
@@ -56,7 +59,7 @@ async def test_if_database_is_empty():
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.find_steam_ids(db, steam_mock, 2)
+    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -107,6 +110,7 @@ async def test_if_database_is_not_empty():
     expected_init_price = 1500.0
     expected_status = usecases.PostStatus.PENDING_PUBLISH
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 5:
@@ -116,7 +120,7 @@ async def test_if_database_is_not_empty():
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.find_steam_ids(db, steam_mock, 2)
+    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -153,6 +157,7 @@ async def test_if_success():
     expected_init_price = 1500.0
     expected_status = usecases.PostStatus.PENDING_PUBLISH
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 1:
@@ -162,7 +167,7 @@ async def test_if_success():
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.find_steam_ids(db, steam_mock, 2)
+    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -194,6 +199,7 @@ async def test_if_not_success():
                     }
                 }
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_mock = Mock(spec=Steam)
     def side_effect(app_id, country, filters):
         if app_id == 1:
@@ -203,7 +209,7 @@ async def test_if_not_success():
     steam_mock.apps.get_app_details.side_effect = side_effect
 
     # Act
-    await usecases.find_steam_ids(db, steam_mock, 2)
+    await usecases.find_steam_ids(db, steam_mock, 2, logger_mock)
 
     # Assert
     async with db.execute("SELECT * FROM steam_apps_info") as c:
@@ -225,13 +231,15 @@ async def test_if_api_response_format_is_wrong():
 
     json_without_data_key = {'1': {'success': True}}
     json_without_id_key = {"Some": "key"}
+
+    logger_mock = Mock(spec=logging.Logger)
     steam_api_mock = Mock(spec=Steam)
 
     steam_api_mock.apps.get_app_details.return_value = json_without_id_key
-    await usecases.find_steam_ids(db, steam_api_mock, 2)
+    await usecases.find_steam_ids(db, steam_api_mock, 2, logger_mock)
 
     steam_api_mock.apps.get_app_details.return_value = json_without_data_key
-    await usecases.find_steam_ids(db, steam_api_mock, 2)
+    await usecases.find_steam_ids(db, steam_api_mock, 2, logger_mock)
 
     await db.close()
 
@@ -246,9 +254,10 @@ async def test_if_api_request_limit_is_exceeded():
 
     none_response = None
 
+    logger_mock = Mock(spec=logging.Logger)
     steam_api_mock = Mock(spec=Steam)
 
     steam_api_mock.apps.get_app_details.return_value = none_response
-    await usecases.find_steam_ids(db, steam_api_mock, 2, 2, 2)
+    await usecases.find_steam_ids(db, steam_api_mock, 2, logger_mock, 2, 2)
 
     await db.close()
